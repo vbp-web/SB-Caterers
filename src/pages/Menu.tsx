@@ -7,7 +7,8 @@ import {
   Search, Coffee, Soup, Flame, Zap, ChefHat, 
   Pizza, IceCream, Utensils, ChevronRight, 
   X, ArrowUp, Globe, Map, Salad as SaladIcon, 
-  Droplets, Star, CookingPot, Check, FileText
+  Droplets, Star, CookingPot, Check, FileText,
+  LayoutGrid
 } from 'lucide-react';
 
 interface MenuItem {
@@ -1390,6 +1391,7 @@ const MENU_DATA: MenuItem[] = [
 ];
 
 const CATEGORIES = [
+  { id: 'All', icon: <LayoutGrid size={18} /> },
   { id: 'Welcome Drinks', icon: <Coffee size={18} /> },
   { id: 'Soup', icon: <Soup size={18} /> },
   { id: 'Starters', icon: <Flame size={18} /> },
@@ -1524,7 +1526,8 @@ export default function Menu() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState(CATEGORIES[0].id);
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [currentSection, setCurrentSection] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showHeader, setShowHeader] = useState(true);
   const [selectedItems, setSelectedItems] = useState<MenuItem[]>([]);
@@ -1629,20 +1632,26 @@ export default function Menu() {
       }
       lastScrollY.current = currentScrollY;
       
-      // Update active category based on scroll position
+      // Update current section based on scroll position
       const scrollPos = currentScrollY + 200;
+      let found = false;
       for (const cat of CATEGORIES) {
+        if (cat.id === 'All') continue;
         const element = categoryRefs.current[cat.id];
         if (element && element.offsetTop <= scrollPos && element.offsetTop + element.offsetHeight > scrollPos) {
-          setActiveCategory(cat.id);
+          setCurrentSection(cat.id);
+          found = true;
           break;
         }
+      }
+      if (!found && currentScrollY < 100) {
+        setCurrentSection('');
       }
     };
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [activeCategory, searchQuery]);
 
   const filteredMenu = useMemo(() => {
     return MENU_DATA.filter(item => 
@@ -1663,19 +1672,29 @@ export default function Menu() {
   }, [filteredMenu]);
 
   const scrollToCategory = (id: string) => {
-    const element = categoryRefs.current[id];
-    if (element) {
-      const offset = 140; // Height of sticky header + nav
-      const bodyRect = document.body.getBoundingClientRect().top;
-      const elementRect = element.getBoundingClientRect().top;
-      const elementPosition = elementRect - bodyRect;
-      const offsetPosition = elementPosition - offset;
+    setActiveCategory(id);
+    
+    // Small delay to allow layout to update if filtering
+    setTimeout(() => {
+      if (id === 'All') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
 
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth'
-      });
-    }
+      const element = categoryRefs.current[id];
+      if (element) {
+        const offset = 140; // Height of sticky header + nav
+        const bodyRect = document.body.getBoundingClientRect().top;
+        const elementRect = element.getBoundingClientRect().top;
+        const elementPosition = elementRect - bodyRect;
+        const offsetPosition = elementPosition - offset;
+
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: 'smooth'
+        });
+      }
+    }, 50);
   };
 
   return (
@@ -1692,7 +1711,13 @@ export default function Menu() {
               type="text"
               placeholder="Search for your favorite dish..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                // If searching and not in 'All' mode, switch to 'All' to show global results
+                if (e.target.value !== '' && activeCategory !== 'All') {
+                  setActiveCategory('All');
+                }
+              }}
               className="w-full bg-white/5 border border-white/10 rounded-full py-4 pl-12 pr-12 focus:outline-none focus:border-gold transition-all text-white placeholder:text-white/30"
             />
             {searchQuery && (
@@ -1707,26 +1732,29 @@ export default function Menu() {
 
           {/* Category Navigation */}
           <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar pb-4">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => scrollToCategory(cat.id)}
-                className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${
-                  activeCategory === cat.id 
-                    ? 'bg-gold text-premium-black border-gold shadow-[0_0_15px_rgba(212,175,55,0.3)]' 
-                    : 'bg-white/5 text-white/60 border-white/10 hover:border-gold/50 hover:text-gold'
-                }`}
-              >
-                {cat.icon}
-                {cat.id}
-              </button>
-            ))}
+            {CATEGORIES.map((cat) => {
+              const isActive = activeCategory === cat.id || (activeCategory === 'All' && currentSection === cat.id);
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => scrollToCategory(cat.id)}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${
+                    isActive 
+                      ? 'bg-gold text-premium-black border-gold shadow-[0_0_15px_rgba(212,175,55,0.3)]' 
+                      : 'bg-white/5 text-white/60 border-white/10 hover:border-gold/50 hover:text-gold'
+                  }`}
+                >
+                  {cat.icon}
+                  {cat.id}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
       {/* Menu Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div id="menu-content-top" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {filteredMenu.length === 0 ? (
           <div className="text-center py-32">
             <Search size={48} className="text-gold/20 mx-auto mb-6" />
@@ -1736,8 +1764,14 @@ export default function Menu() {
         ) : (
           <div className="space-y-24">
             {CATEGORIES.map((cat) => {
+              if (cat.id === 'All') return null;
+              
               const items = groupedMenu[cat.id] || [];
               if (items.length === 0) return null;
+
+              // Filter logic: show if All is selected, or if this category is selected
+              const shouldShow = activeCategory === 'All' || activeCategory === cat.id;
+              if (!shouldShow) return null;
 
               return (
                 <MenuSection 
