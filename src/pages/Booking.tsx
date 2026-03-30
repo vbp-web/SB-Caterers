@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Users, Phone, User, MapPin, Send } from 'lucide-react';
+import { Calendar, Users, Phone, User, MapPin, Send, FileText } from 'lucide-react';
 
 export default function Booking() {
   const location = useLocation();
@@ -22,6 +22,56 @@ export default function Booking() {
         ...prev,
         message: `I am interested in ${location.state.package}.`
       }));
+    } else if (location.state?.selectedItems) {
+      const categoryOrder = [
+        'Welcome Drinks',
+        'Soup',
+        'Starters',
+        'Chaat Counter',
+        'Live Counters',
+        'World Cuisine',
+        'Traditional Counter',
+        'Salad',
+        "Sweet's",
+        "Liquid Sweet's",
+        'Garvi Gujarat Counter',
+        'Main Course',
+        'Roti / Bread',
+        'Desserts'
+      ];
+
+      const sortedItems = [...location.state.selectedItems].sort((a: any, b: any) => {
+        const indexA = categoryOrder.indexOf(a.category);
+        const indexB = categoryOrder.indexOf(b.category);
+        if (indexA !== indexB) return indexA - indexB;
+        return a.name.localeCompare(b.name);
+      });
+
+      const groupedItems: { [key: string]: string[] } = {};
+      sortedItems.forEach((item: any) => {
+        if (!groupedItems[item.category]) {
+          groupedItems[item.category] = [];
+        }
+        groupedItems[item.category].push(item.name);
+      });
+
+      let itemsMessage = "I have selected the following items from your menu:\n\n";
+      
+      // Use categoryOrder to ensure the message follows the menu's category sequence
+      categoryOrder.forEach(category => {
+        if (groupedItems[category]) {
+          itemsMessage += `*${category}:*\n`;
+          groupedItems[category].forEach(item => {
+            itemsMessage += `- ${item}\n`;
+          });
+          itemsMessage += "\n";
+        }
+      });
+
+      setFormData(prev => ({
+        ...prev,
+        message: itemsMessage.trim()
+      }));
     } else if (location.state?.message) {
       setFormData(prev => ({
         ...prev,
@@ -30,17 +80,30 @@ export default function Booking() {
     }
   }, [location.state]);
 
+  const downloadPDF = () => {
+    if (location.state?.pdfData) {
+      const link = document.createElement('a');
+      link.href = location.state.pdfData;
+      link.download = 'selected-menu.pdf';
+      link.click();
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     // Construct WhatsApp message
-    const messageText = `*New Booking Request - SB Caterers*\n\n` +
+    let messageText = `*New Booking Request - SB Caterers*\n\n` +
       `*Name:* ${formData.name}\n` +
       `*Phone:* ${formData.phone}\n` +
       `*Event:* ${formData.eventType.charAt(0).toUpperCase() + formData.eventType.slice(1)}\n` +
       `*Guests:* ${formData.guests}\n` +
       `*Date:* ${formData.date}\n` +
       `*Message:* ${formData.message}`;
+    
+    if (location.state?.pdfData) {
+      messageText += `\n\n_Note: I have selected specific items from your menu. Please check the PDF I will share separately._`;
+    }
     
     const encodedMessage = encodeURIComponent(messageText);
     const whatsappUrl = `https://wa.me/918200428348?text=${encodedMessage}`;
@@ -130,6 +193,26 @@ export default function Booking() {
                   onSubmit={handleSubmit} 
                   className="space-y-6"
                 >
+                  {location.state?.pdfData && (
+                    <div className="bg-gold/10 border border-gold/20 p-4 mb-8 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-gold/20 rounded text-gold">
+                          <FileText size={16} />
+                        </div>
+                        <div>
+                          <p className="text-white font-bold text-sm">Menu Selection Saved</p>
+                          <p className="text-white/40 text-xs">A PDF of your selected items is ready.</p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={downloadPDF}
+                        className="text-gold text-xs font-bold uppercase tracking-widest hover:text-gold-light transition-colors"
+                      >
+                        Download PDF
+                      </button>
+                    </div>
+                  )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-xs uppercase tracking-widest text-gold font-bold">Full Name</label>

@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   Search, Coffee, Soup, Flame, Zap, ChefHat, 
   Pizza, IceCream, Utensils, ChevronRight, 
   X, ArrowUp, Globe, Map, Salad as SaladIcon, 
-  Droplets, Star, CookingPot
+  Droplets, Star, CookingPot, Check, FileText
 } from 'lucide-react';
 
 interface MenuItem {
@@ -1407,11 +1409,15 @@ const CATEGORIES = [
 const MenuSection = React.memo(({ 
   cat, 
   items, 
-  categoryRef 
+  categoryRef,
+  selectedItems,
+  onToggleItem
 }: { 
   cat: typeof CATEGORIES[0], 
   items: MenuItem[], 
-  categoryRef: (el: HTMLDivElement | null) => void 
+  categoryRef: (el: HTMLDivElement | null) => void,
+  selectedItems: MenuItem[],
+  onToggleItem: (item: MenuItem) => void
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -1455,40 +1461,55 @@ const MenuSection = React.memo(({
 
       {isVisible ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {items.map((item, idx) => (
-            <div
-              key={`${item.name}-${item.subCategory}-${idx}`}
-              className="group bg-white/5 border border-white/10 p-6 hover:border-gold/40 transition-all relative overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gold/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              
-              <div className="relative z-10">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-white group-hover:text-gold transition-colors">{item.name}</h3>
-                    {item.gujaratiName && (
-                      <h4 className="text-sm font-medium text-gold/80 mb-1 font-serif">{item.gujaratiName}</h4>
-                    )}
-                    {item.subCategory && (
-                      <span className="text-[10px] text-gold/60 uppercase tracking-widest">{item.subCategory}</span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-white/40 text-sm font-light leading-relaxed mb-4">
-                  {item.description}
-                </p>
-                {item.tags && (
-                  <div className="flex flex-wrap gap-2">
-                    {item.tags.map(tag => (
-                      <span key={tag} className="text-[10px] uppercase tracking-widest font-bold px-2 py-1 bg-gold/10 text-gold border border-gold/20">
-                        {tag}
-                      </span>
-                    ))}
+          {items.map((item, idx) => {
+            const isSelected = selectedItems.some(si => si.name === item.name && si.subCategory === item.subCategory);
+            return (
+              <div
+                key={`${item.name}-${item.subCategory}-${idx}`}
+                onClick={() => onToggleItem(item)}
+                className={`group border p-6 transition-all relative overflow-hidden cursor-pointer ${
+                  isSelected 
+                    ? 'bg-gold/10 border-gold shadow-[0_0_20px_rgba(212,175,55,0.1)]' 
+                    : 'bg-white/5 border-white/10 hover:border-gold/40'
+                }`}
+              >
+                <div className={`absolute inset-0 bg-gold/5 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}></div>
+                
+                {isSelected && (
+                  <div className="absolute top-0 right-0 w-12 h-12 overflow-hidden z-20">
+                    <div className="absolute top-0 right-0 w-full h-full bg-gold transform rotate-45 translate-x-1/2 -translate-y-1/2"></div>
+                    <Check className="absolute top-1 right-1 text-premium-black w-4 h-4 z-30" />
                   </div>
                 )}
+
+                <div className="relative z-10">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className={`text-lg font-bold transition-colors ${isSelected ? 'text-gold' : 'text-white group-hover:text-gold'}`}>{item.name}</h3>
+                      {item.gujaratiName && (
+                        <h4 className="text-sm font-medium text-gold/80 mb-1 font-serif">{item.gujaratiName}</h4>
+                      )}
+                      {item.subCategory && (
+                        <span className="text-[10px] text-gold/60 uppercase tracking-widest">{item.subCategory}</span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-white/40 text-sm font-light leading-relaxed mb-4">
+                    {item.description}
+                  </p>
+                  {item.tags && (
+                    <div className="flex flex-wrap gap-2">
+                      {item.tags.map(tag => (
+                        <span key={tag} className="text-[10px] uppercase tracking-widest font-bold px-2 py-1 bg-gold/10 text-gold border border-gold/20">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="h-40 flex items-center justify-center">
@@ -1501,12 +1522,88 @@ const MenuSection = React.memo(({
 
 export default function Menu() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0].id);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showHeader, setShowHeader] = useState(true);
+  const [selectedItems, setSelectedItems] = useState<MenuItem[]>([]);
   const lastScrollY = useRef(0);
   const categoryRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+  const toggleItemSelection = (item: MenuItem) => {
+    setSelectedItems(prev => {
+      const isAlreadySelected = prev.some(si => si.name === item.name && si.subCategory === item.subCategory);
+      if (isAlreadySelected) {
+        return prev.filter(si => !(si.name === item.name && si.subCategory === item.subCategory));
+      } else {
+        return [...prev, item];
+      }
+    });
+  };
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFillColor(10, 10, 10);
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    doc.setTextColor(212, 175, 55);
+    doc.setFontSize(24);
+    doc.text('SB CATERERS', 105, 20, { align: 'center' });
+    
+    // Sort items by category order
+    const categoryOrder = CATEGORIES.map(c => c.id);
+    const sortedItems = [...selectedItems].sort((a, b) => {
+      const indexA = categoryOrder.indexOf(a.category);
+      const indexB = categoryOrder.indexOf(b.category);
+      if (indexA !== indexB) return indexA - indexB;
+      return a.name.localeCompare(b.name);
+    });
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(12);
+    doc.text('SELECTED MENU ITEMS', 105, 30, { align: 'center' });
+    
+    // Table Data
+    const tableData = sortedItems.map((item, index) => [
+      index + 1,
+      item.name,
+      item.category,
+      item.subCategory || '-'
+    ]);
+    
+    autoTable(doc, {
+      startY: 50,
+      head: [['#', 'Item Name', 'Category', 'Sub-Category']],
+      body: tableData,
+      headStyles: { fillColor: [212, 175, 55], textColor: [10, 10, 10] },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      margin: { top: 50 },
+    });
+    
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(10);
+      doc.setTextColor(150, 150, 150);
+      doc.text('Contact: +91 8200428348 / 9727403655', 105, 285, { align: 'center' });
+    }
+    
+    return doc.output('datauristring');
+  };
+
+  const handleBookNow = () => {
+    const pdfData = generatePDF();
+    navigate('/booking', { 
+      state: { 
+        selectedItems: selectedItems,
+        pdfData: pdfData
+      } 
+    });
+  };
 
   useEffect(() => {
     if (location.state?.category) {
@@ -1648,12 +1745,53 @@ export default function Menu() {
                   cat={cat}
                   items={items}
                   categoryRef={el => categoryRefs.current[cat.id] = el}
+                  selectedItems={selectedItems}
+                  onToggleItem={toggleItemSelection}
                 />
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Floating Selection Bar */}
+      <AnimatePresence>
+        {selectedItems.length > 0 && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-8 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-auto md:min-w-[400px] z-50"
+          >
+            <div className="bg-premium-black border border-gold/50 p-4 md:p-6 shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex flex-col md:flex-row items-center gap-4 md:gap-8">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gold/10 border border-gold/20 rounded-full flex items-center justify-center text-gold">
+                  <Utensils size={20} />
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-sm md:text-base">{selectedItems.length} Items Selected</h4>
+                  <button 
+                    onClick={() => setSelectedItems([])}
+                    className="text-gold/60 text-xs hover:text-gold transition-colors flex items-center gap-1"
+                  >
+                    <X size={12} /> Clear all
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <button
+                  onClick={handleBookNow}
+                  className="flex-1 md:flex-none bg-gold text-premium-black px-6 py-3 font-bold uppercase tracking-widest text-xs hover:bg-gold-light transition-all flex items-center justify-center gap-2"
+                >
+                  <FileText size={16} />
+                  Book with Selection
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* CTA Section */}
       <section className="py-24 bg-gold mt-12">
@@ -1662,13 +1800,32 @@ export default function Menu() {
           <p className="text-premium-black/70 text-lg mb-12 max-w-2xl mx-auto">
             Our chefs are ready to create these culinary delights for your special occasion.
           </p>
-          <Link 
-            to="/booking"
-            state={{ source: 'menu', message: "I've reviewed your menu and would like to discuss catering for my event." }}
-            className="inline-block bg-premium-black text-white px-12 py-5 font-bold uppercase tracking-widest text-sm hover:bg-black/90 transition-all transform hover:scale-105 shadow-2xl"
+          <button 
+            onClick={selectedItems.length > 0 ? handleBookNow : undefined}
+            className={`inline-block px-12 py-5 font-bold uppercase tracking-widest text-sm transition-all transform hover:scale-105 shadow-2xl ${
+              selectedItems.length > 0 
+                ? 'bg-premium-black text-white hover:bg-black/90' 
+                : 'bg-premium-black text-white hover:bg-black/90'
+            }`}
           >
-            Book Now
-          </Link>
+            {selectedItems.length > 0 ? 'Book with Selection' : 'Book Now'}
+          </button>
+          {selectedItems.length === 0 && (
+            <Link 
+              to="/booking"
+              state={{ source: 'menu', message: "I've reviewed your menu and would like to discuss catering for my event." }}
+              className="hidden"
+              id="hidden-booking-link"
+            ></Link>
+          )}
+          {selectedItems.length === 0 && (
+            <button 
+              onClick={() => document.getElementById('hidden-booking-link')?.click()}
+              className="inline-block bg-premium-black text-white px-12 py-5 font-bold uppercase tracking-widest text-sm hover:bg-black/90 transition-all transform hover:scale-105 shadow-2xl"
+            >
+              Book Now
+            </button>
+          )}
         </div>
       </section>
 
@@ -1689,13 +1846,22 @@ export default function Menu() {
 
       {/* Floating CTA (Mobile Only) */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 md:hidden">
-        <Link 
-          to="/booking"
-          state={{ source: 'menu-mobile', message: "I've reviewed your menu and would like to discuss catering for my event." }}
-          className="bg-gold text-premium-black px-8 py-4 rounded-full font-bold uppercase tracking-widest text-sm shadow-2xl flex items-center gap-2"
-        >
-          Book Now <ChevronRight size={18} />
-        </Link>
+        {selectedItems.length === 0 ? (
+          <Link 
+            to="/booking"
+            state={{ source: 'menu-mobile', message: "I've reviewed your menu and would like to discuss catering for my event." }}
+            className="bg-gold text-premium-black px-8 py-4 rounded-full font-bold uppercase tracking-widest text-sm shadow-2xl flex items-center gap-2"
+          >
+            Book Now <ChevronRight size={18} />
+          </Link>
+        ) : (
+          <button 
+            onClick={handleBookNow}
+            className="bg-gold text-premium-black px-8 py-4 rounded-full font-bold uppercase tracking-widest text-sm shadow-2xl flex items-center gap-2"
+          >
+            Book with Selection <ChevronRight size={18} />
+          </button>
+        )}
       </div>
     </div>
   );
