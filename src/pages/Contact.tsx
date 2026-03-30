@@ -28,7 +28,7 @@ export default function Contact() {
             </div>
             <h3 className="text-xl font-serif font-bold">Call Us</h3>
             <p className="text-white/60">Available 9 AM - 9 PM</p>
-            <p className="text-gold font-bold text-lg">+91 8200428348</p>
+            <p className="text-gold font-bold text-lg">+91 8200428348 / 9727403655</p>
           </div>
 
           <div className="bg-white/5 p-10 border border-white/10 text-center space-y-6 hover:border-gold/30 transition-colors">
